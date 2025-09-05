@@ -32,7 +32,7 @@ $ npx prisma generate
 
 ## Migrar la base de datos
 ```bash
-# Aplicar migraciones (si es la primera vez)
+# Aplicar migraciones (si es la primera vez) (En este caso no ya que el archivo .db ya esta dentro del repositorio)
 $ npx prisma migrate dev
 
 # O resetear la base de datos si hay problemas
