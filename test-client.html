@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test WebSocket Client - To-Do List</title>
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px
+        }
+
+        .container {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 5px
+        }
+
+        .messages {
+            background: #f9f9f9;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            height: 300px;
+            overflow-y: auto;
+            margin: 10px 0
+        }
+
+        .event {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 3px;
+            border-left: 4px solid
+        }
+
+        .created {
+            background: #d4edda;
+            border-left-color: #28a745
+        }
+
+        .updated {
+            background: #fff3cd;
+            border-left-color: #ffc107
+        }
+
+        .deleted {
+            background: #f8d7da;
+            border-left-color: #dc3545
+        }
+
+        .connected {
+            background: #cce5ff;
+            border-left-color: #007bff
+        }
+
+        .disconnected {
+            background: #f0f0f0;
+            border-left-color: #6c757d
+        }
+
+        .error {
+            background: #f8d7da;
+            border-left-color: #dc3545
+        }
+
+        input,
+        textarea,
+        button,
+        select {
+            margin: 5px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 3px
+        }
+
+        button {
+            background: #007bff;
+            color: #fff;
+            cursor: pointer
+        }
+
+        button:hover {
+            background: #0056b3
+        }
+
+        .status {
+            font-weight: bold;
+            margin: 10px 0
+        }
+
+        .connected span {
+            color: green
+        }
+
+        .disconnected span {
+            color: red
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Test WebSocket Client - To-Do List</h1>
+
+    <div class="status" id="status">Estado: <span class="disconnected">Desconectado</span></div>
+
+    <div class="container">
+        <h2>Crear Nueva Tarea</h2>
+        <input type="text" id="titulo" placeholder="Título de la tarea (máx. 100 chars)" maxlength="100" />
+        <br />
+        <textarea id="descripcion" placeholder="Descripción opcional (máx. 500 chars)" maxlength="500" rows="3"
+            cols="50"></textarea>
+        <br />
+        <button type="button" id="createBtn">Crear Tarea</button>
+    </div>
+
+    <div class="container">
+        <h2>Actualizar Tarea</h2>
+        <input type="number" id="updateId" placeholder="ID de la tarea" />
+        <select id="newStatus">
+            <option value="pendiente">Pendiente</option>
+            <option value="en_progreso">En Progreso</option>
+            <option value="completada">Completada</option>
+        </select>
+        <button type="button" id="updateBtn">Actualizar</button>
+        <button type="button" id="deleteBtn">Eliminar</button>
+    </div>
+
+    <div class="container">
+        <h2>Todas las Tareas</h2>
+        <button type="button" id="loadBtn">Cargar Tareas</button>
+        <div id="tasksList"></div>
+    </div>
+
+    <div class="container">
+        <h2>Eventos WebSocket en Tiempo Real</h2>
+        <button type="button" id="clearBtn">Limpiar Mensajes</button>
+        <div class="messages" id="messages"></div>
+    </div>
+
+    <script>
+        // helper
+        const $ = (id) => document.getElementById(id);
+
+        // bloquear cualquier submit accidental
+        document.addEventListener('submit', (e) => { e.preventDefault(); e.stopPropagation(); return false; }, true);
+
+        // ws
+        const socket = io('http://localhost:3000');
+        const messages = $('messages');
+        const tasksList = $('tasksList');
+
+        socket.on('connect', () => {
+            $('status').innerHTML = 'Estado: <span class="connected">Conectado</span>';
+            addMessage('Conectado al servidor WebSocket', 'connected');
+        });
+
+        socket.on('disconnect', () => {
+            $('status').innerHTML = 'Estado: <span class="disconnected">Desconectado</span>';
+            addMessage('Desconectado del servidor WebSocket', 'disconnected');
+        });
+
+        // eventos tareas
+        socket.on('taskCreated', (t) => {
+            addMessage(`Nueva tarea creada: ${t.titulo} (ID: ${t.id})`, 'created');
+            addTaskToDOM(t);
+        });
+
+        socket.on('taskUpdated', (t) => {
+            addMessage(`Tarea actualizada: ${t.titulo} - Estado: ${t.status} (ID: ${t.id})`, 'updated');
+            updateTaskInDOM(t);
+        });
+
+        socket.on('taskDeleted', (t) => {
+            addMessage(`Tarea eliminada: ${t.titulo} (ID: ${t.id})`, 'deleted');
+            removeTaskFromDOM(t.id);
+        });
+
+        // ui
+        function addMessage(text, type) {
+            const time = new Date().toLocaleTimeString();
+            const el = document.createElement('div');
+            el.className = `event ${type}`;
+            el.textContent = `[${time}] ${text}`;
+            messages.appendChild(el);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function clearMessages(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            messages.innerHTML = '';
+            return false;
+        }
+
+        // api
+        async function createTask(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            const titulo = $('titulo').value.trim();
+            const descripcion = $('descripcion').value.trim();
+            if (!titulo) { alert('El título es obligatorio'); return false; }
+
+            try {
+                const res = await fetch('http://localhost:3000/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ titulo, descripcion })
+                });
+                if (!res.ok) {
+                    addMessage(`Error al crear tarea: ${await res.text()}`, 'error');
+                    return false;
+                }
+                $('titulo').value = '';
+                $('descripcion').value = '';
+                addMessage('Tarea creada exitosamente vía API', 'created');
+            } catch (err) {
+                addMessage(`Error de red: ${err.message}`, 'error');
+            }
+            return false;
+        }
+
+        async function updateTask(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            const id = $('updateId').value.trim();
+            const status = $('newStatus').value;
+            if (!id) { alert('ID de tarea es obligatorio'); return false; }
+
+            try {
+                const res = await fetch(`http://localhost:3000/tasks/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status })
+                });
+                if (!res.ok) {
+                    addMessage(`Error al actualizar tarea: ${await res.text()}`, 'error');
+                    return false;
+                }
+                addMessage('Tarea actualizada exitosamente vía API', 'updated');
+            } catch (err) {
+                addMessage(`Error de red: ${err.message}`, 'error');
+            }
+            return false;
+        }
+
+        async function deleteTask(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            const id = $('updateId').value.trim();
+            if (!id) { alert('ID de tarea es obligatorio'); return false; }
+            if (!confirm('¿Estás seguro de eliminar esta tarea?')) { return false; }
+
+            try {
+                const res = await fetch(`http://localhost:3000/tasks/${id}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    addMessage(`Error al eliminar tarea: ${await res.text()}`, 'error');
+                    return false;
+                }
+                $('updateId').value = '';
+                addMessage('Tarea eliminada exitosamente vía API', 'deleted');
+            } catch (err) {
+                addMessage(`Error de red: ${err.message}`, 'error');
+            }
+            return false;
+        }
+
+        async function loadTasks(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            try {
+                const res = await fetch('http://localhost:3000/tasks');
+                if (!res.ok) { tasksList.innerHTML = '<p>No hay tareas disponibles</p>'; return false; }
+                const tasks = await res.json();
+                displayTasks(tasks);
+            } catch (err) {
+                tasksList.innerHTML = `<p>Error al cargar tareas: ${err.message}</p>`;
+            }
+            return false;
+        }
+
+        // dom tareas
+        function displayTasks(tasks) {
+            if (!tasks || tasks.length === 0) { tasksList.innerHTML = '<p>No hay tareas disponibles</p>'; return; }
+            tasksList.innerHTML = tasks.map(renderTaskHTML).join('');
+        }
+
+        function addTaskToDOM(task) {
+            if (tasksList.innerHTML.includes('No hay tareas disponibles')) tasksList.innerHTML = '';
+            tasksList.appendChild(createTaskElement(task));
+        }
+
+        function updateTaskInDOM(task) {
+            const el = document.getElementById(`task-${task.id}`);
+            if (!el) return;
+            el.replaceWith(createTaskElement(task));
+        }
+
+        function removeTaskFromDOM(id) {
+            const el = document.getElementById(`task-${id}`);
+            if (el) el.remove();
+            if (!tasksList.children.length) tasksList.innerHTML = '<p>No hay tareas disponibles</p>';
+        }
+
+        function createTaskElement(task) {
+            const div = document.createElement('div');
+            div.id = `task-${task.id}`;
+            div.style.cssText = 'border:1px solid #ddd;padding:10px;margin:5px 0;border-radius:3px';
+            div.innerHTML = renderTaskHTML(task);
+            return div;
+        }
+
+        function renderTaskHTML(task) {
+            return `
+        <div id="task-${task.id}" style="border:1px solid #ddd;padding:10px;margin:5px 0;border-radius:3px">
+          <strong>ID: ${task.id}</strong> | <strong>${task.titulo}</strong><br>
+          <em>Descripción:</em> ${task.descripcion || 'Sin descripción'}<br>
+          <em>Estado:</em> <span style="color:${getStatusColor(task.status)}">${task.status}</span><br>
+          <em>Creado:</em> ${new Date(task.fechaCreacion).toLocaleString()}<br>
+          <em>Actualizado:</em> ${new Date(task.fechaActualizacion).toLocaleString()}
+        </div>
+      `;
+        }
+
+        function getStatusColor(s) {
+            if (s === 'pendiente') return '#dc3545';
+            if (s === 'en_progreso') return '#ffc107';
+            if (s === 'completada') return '#28a745';
+            return '#6c757d';
+        }
+
+        // listeners (click y Enter sin refresh)
+        $('createBtn').addEventListener('click', createTask);
+        $('updateBtn').addEventListener('click', updateTask);
+        $('deleteBtn').addEventListener('click', deleteTask);
+        $('loadBtn').addEventListener('click', loadTasks);
+        $('clearBtn').addEventListener('click', clearMessages);
+
+        const enterAsAction = (input, handler) => {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handler(e); }
+            });
+        };
+        enterAsAction($('titulo'), createTask);
+        enterAsAction($('updateId'), updateTask);
+
+        // carga inicial
+        loadTasks();
+    </script>
+</body>
+
+</html>
