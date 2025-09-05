@@ -52,6 +52,68 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
+## Testing y Calidad de Código
+
+El proyecto incluye una suite completa de pruebas unitarias para garantizar la calidad y confiabilidad del código.
+
+### Comandos de Testing Disponibles
+
+```bash
+# Ejecutar todas las pruebas
+$ npm test
+
+# Ejecutar pruebas en modo watch (observa cambios)
+$ npm run test:watch
+
+# Ejecutar pruebas con reporte de cobertura
+$ npm run test:cov
+
+# Ejecutar pruebas en modo debug
+$ npm run test:debug
+
+# Ejecutar pruebas end-to-end
+$ npm run test:e2e
+```
+
+### Pruebas Específicas del Módulo Tasks
+
+```bash
+# Ejecutar solo las pruebas del módulo tasks
+$ npm test -- --testPathPattern=tasks
+
+# Ejecutar pruebas de tasks con output detallado
+$ npm test -- --testPathPattern=tasks --verbose
+
+# Ejecutar pruebas de tasks con cobertura
+$ npm run test:cov -- --testPathPattern=tasks
+```
+
+### Cobertura de Código
+
+Las pruebas unitarias cubren:
+- ✅ **TasksController**: 100% de cobertura - Todos los endpoints REST
+- ✅ **TasksService**: 100% de cobertura - Toda la lógica de negocio
+- ✅ **DTOs**: 100% de cobertura - Validaciones de entrada
+- 📋 **26 casos de prueba** en total con nombres descriptivos en español
+
+**Funcionalidades probadas:**
+- Creación de tareas (con y sin descripción)
+- Obtención de todas las tareas (con y sin datos)
+- Búsqueda de tarea por ID (exitosa y con errores)
+- Actualización de tareas (completa y parcial)
+- Eliminación de tareas (exitosa y con errores)
+- Conversión de parámetros string a number
+- Manejo de excepciones NotFoundException
+- Emisión de eventos WebSocket
+
+### Documentación de Pruebas
+
+Todas las pruebas incluyen documentación JSDoc completa con:
+- **@description**: Propósito de cada suite de pruebas
+- **@test**: Descripción específica de cada caso
+- **@expects**: Comportamiento esperado
+- **@validates**: Qué validaciones se verifican
+
 ## API Endpoints
 
 La API REST está disponible en `http://localhost:3000/tasks` con los siguientes endpoints:
